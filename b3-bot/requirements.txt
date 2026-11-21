@@ -1,0 +1,15 @@
+# Core (roda em qualquer SO)
+numpy>=1.26
+pandas>=2.0
+PyYAML>=6.0
+scikit-learn>=1.4
+
+# Execucao real na B3 - SOMENTE WINDOWS
+# O terminal MetaTrader 5 precisa estar instalado e logado na corretora.
+MetaTrader5>=5.0.45 ; sys_platform == "win32"
+
+# Decisor LLM (opcional - exige ANTHROPIC_API_KEY)
+anthropic>=0.40
+
+# Dev
+pytest>=8.0

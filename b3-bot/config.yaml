@@ -1,0 +1,115 @@
+# ============================================================
+#  Robo B3 - mini-indice (WIN) - analise 1min + 5min
+# ============================================================
+#  ATENCAO: "mode" controla se ordem real sai ou nao.
+#    paper -> nada e enviado. Apenas analisa e registra no journal.
+#    demo  -> envia para a conta MT5 configurada (use conta DEMO).
+#    live  -> envia para conta real. Exige live_confirmation abaixo.
+# ============================================================
+
+mode: paper
+
+# Travamento do modo live. Para operar dinheiro real, as DUAS coisas:
+#   1) mode: live
+#   2) live_confirmation: "EU ASSUMO O RISCO"
+# Sem isso o robo se recusa a subir em live. Proposital.
+live_confirmation: ""
+
+symbol:
+  # Raiz do contrato. O codigo completo (ex: WINZ25) e resolvido
+  # automaticamente pelo vencimento vigente - nunca hardcode.
+  root: WIN
+  # Se a sua corretora usa um sufixo/nome diferente no MT5, force aqui.
+  # Deixe null para resolucao automatica.
+  override: null
+  point_value: 0.20      # R$ por ponto do WIN
+  tick_size: 5.0         # WIN negocia de 5 em 5 pontos
+  min_volume: 1          # contratos
+
+mt5:
+  # Deixe null para usar o terminal ja logado no Windows.
+  login: null
+  password: null
+  server: null
+  terminal_path: null
+  magic: 20261121        # identifica as ordens deste robo
+  deviation_points: 20   # slippage maximo aceito na ordem a mercado
+
+session:
+  timezone: America/Sao_Paulo
+  # Nao opera no leilao de abertura nem na volatilidade dos primeiros minutos.
+  entry_start: "09:15"
+  # Para de ABRIR posicao nova.
+  entry_end: "17:15"
+  # Zera tudo a mercado. Day trade: nao carrega posicao overnight.
+  force_flat_at: "17:40"
+
+risk:
+  max_contracts: 1            # teto absoluto por posicao
+  risk_per_trade_brl: 150.0   # risco alvo por operacao (define o sizing)
+  stop_atr_mult: 1.5          # stop = N x ATR(14) do 1min
+  target_atr_mult: 2.5        # alvo  = N x ATR(14) do 1min -> R:R ~1.67
+  min_stop_points: 100        # piso do stop, em pontos de WIN
+  max_stop_points: 600        # teto do stop. Acima disso, nao opera.
+  max_daily_loss_brl: 400.0   # KILL SWITCH: atingido, desliga o dia
+  max_daily_trades: 8         # limite de operacoes por dia
+  max_consecutive_losses: 3   # pausa o dia depois de N perdas seguidas
+  cooldown_bars_after_exit: 3 # candles de 1min de espera depois de sair
+  min_rr_after_costs: 1.2     # payoff liquido minimo: abaixo disso nao opera
+
+costs:
+  # CONFIRME estes valores com a sua corretora e na tabela vigente da B3.
+  # Os defaults sao conservadores (erram para cima) de proposito.
+  brokerage_per_order_brl: 0.00   # varias corretoras zeram em derivativos
+  exchange_fee_per_contract_brl: 0.27   # emolumentos+liquidacao por contrato (day trade)
+  registration_fee_per_order_brl: 0.10  # taxa de registro por operacao
+  iss_rate: 0.00                  # se sua corretora cobra ISS sobre corretagem
+  # Tributacao day trade. Entra no relatorio, nao na decisao de cada trade.
+  daytrade_ir_rate: 0.20
+  daytrade_irrf_rate: 0.01
+
+decisor:
+  # rules | ml | llm | hybrid
+  active: rules
+
+  rules:
+    ema_fast: 9
+    ema_slow: 21
+    rsi_period: 14
+    rsi_overbought: 72
+    rsi_oversold: 28
+    breakout_lookback: 20        # candles de 1min para o range de rompimento
+    require_regime: ["trend_up", "trend_down"]  # so opera nestes regimes do 5min
+    min_atr_points: 30           # mercado parado: nao vale o custo
+
+  ml:
+    model_path: models/win_m1.pkl
+    min_confidence: 0.58         # abaixo disso, HOLD
+    horizon_bars: 5              # alvo de treino: retorno em N candles de 1min
+    label_threshold_atr: 0.5     # move > N x ATR para contar como sinal
+
+  llm:
+    # Default: o modelo mais capaz. Em loop de 1min a latencia pesa, entao
+    # voce PODE trocar por um mais rapido/barato - mas essa escolha e sua,
+    # nao minha: claude-sonnet-5-5 (meio) ou claude-haiku-5-5 (mais rapido
+    # e mais barato, menos capaz). Meca a latencia real antes de decidir.
+    model: claude-opus-5-5
+    effort: low                  # thinking curto: o loop de 1min nao espera
+    max_tokens: 700
+    min_confidence: 0.60
+    # Nao chama o LLM a cada candle de 1min por padrao: custo e latencia.
+    # Com true, consulta so quando as regras acham um setup.
+    only_on_rule_setup: true
+    timeout_seconds: 20
+
+  hybrid:
+    # Regras geram o sinal, ML aprova ou veta.
+    ml_veto_threshold: 0.45
+
+direction:
+  allow_long: true
+  allow_short: false    # voce pediu ordem de COMPRA. Mude para true para operar os dois lados.
+
+logging:
+  journal_path: logs/journal.jsonl
+  level: INFO
